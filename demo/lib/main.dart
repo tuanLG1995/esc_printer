@@ -118,7 +118,9 @@ class _MyHomePageState extends State<MyHomePage> {
       String isConnected = await BluetoothThermalPrinter.connectionStatus;
       if (isConnected == "true") {
         var image = await getImage();
-        final result = await BluetoothThermalPrinter.writeBytes(image.getBytes());
+        final Ticket ticket = Ticket(PaperSize.mm80);
+        ticket.image(image);
+        final result = await BluetoothThermalPrinter.writeBytes(ticket.bytes);
         print("Print $result");
       } else {}
     }
