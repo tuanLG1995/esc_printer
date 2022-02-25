@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:bluetooth_thermal_printer/bluetooth_thermal_printer.dart';
 import 'package:flutter/material.dart' hide Image;
 import 'package:esc_pos_printer/esc_pos_printer.dart';
-import 'package:flutter_html_to_pdf/flutter_html_to_pdf.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pdf_render/pdf_render.dart';
+import 'package:flutter/services.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:ping_discover_network/ping_discover_network.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:wifi/wifi.dart';
-import 'package:image/image.dart' as imglib;
+import 'package:image/image.dart';
 
 void main() => runApp(MyApp());
 
@@ -45,11 +45,10 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    printBill('html');
   }
 
   void discover(BuildContext ctx) async {
-    printBill('printerIp');
+
     setState(() {
       isPrintBlue = false;
       isDiscovering = true;
@@ -108,115 +107,261 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void printBluetooth(String select) async {
-    List list = select.split("#");
-    // String name = list[0];
-    String mac = list[1];
-    final String result = await BluetoothThermalPrinter.connect(mac);
-    print("state conneected $result mac = $mac");
-    if (result == "true") {
-      String isConnected = await BluetoothThermalPrinter.connectionStatus;
-      if (isConnected == "true") {
-        var image = await getImage();
-        final Ticket ticket = Ticket(PaperSize.mm80);
-        ticket.image(image);
-        final result = await BluetoothThermalPrinter.writeBytes(ticket.bytes);
-        print("Print $result");
-      } else {}
-    }
-  }
+  // void printBluetooth(String select) async {
+  //   List list = select.split("#");
+  //   // String name = list[0];
+  //   String mac = list[1];
+  //   final String result = await BluetoothThermalPrinter.connect(mac);
+  //   print("state conneected $result mac = $mac");
+  //   if (result == "true") {
+  //     String isConnected = await BluetoothThermalPrinter.connectionStatus;
+  //     if (isConnected == "true") {
+  //       var image = await getImage();
+  //       final Ticket ticket = Ticket(PaperSize.mm80);
+  //       ticket.image(image);
+  //       final result = await BluetoothThermalPrinter.writeBytes(ticket.bytes);
+  //       print("Print $result");
+  //     } else {}
+  //   }
+  // }
 
-  Future<imglib.Image> getImage() async {
-    var htmlContent = """
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-        table, th, td {
-          border: 1px solid black;
-          border-collapse: collapse;
-        }
-        th, td, p {
-          padding: 5px;
-          text-align: left;
-        }
-        </style>
-      </head>
-        <body>
-          <h2>PDF Generated with flutter_html_to_pdf plugin</h2>
-          <table style="width:100%">
-            <caption>Sample HTML Table</caption>
-            <tr>
-              <th>Month</th>
-              <th>Savings</th>
-            </tr>
-            <tr>
-              <td>January</td>
-              <td>100</td>
-            </tr>
-            <tr>
-              <td>February</td>
-              <td>50</td>
-            </tr>
-          </table>
-          <p>Image loaded from web</p>
-          <img src="https://i.imgur.com/wxaJsXF.png" alt="web-img">
-        </body>
-      </html>
-      """;
+  Future<void> printDemoReceipt(NetworkPrinter printer) async {
+    // Print image
+    final ByteData data = await rootBundle.load('assets/rabbit_black.jpg');
+    final Uint8List bytes = data.buffer.asUint8List();
+    final Image image = decodeImage(bytes);
+    printer.image(image);
 
-    var targetFileName = "example_pdf";
+    printer.text('GROCERYLY',
+        styles: PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+        linesAfter: 1);
 
-    Directory appDocDir = await getApplicationDocumentsDirectory();
-    var path = appDocDir.path;
+    printer.text('889  Watson Lane', styles: PosStyles(align: PosAlign.center));
+    printer.text('New Braunfels, TX',
+        styles: PosStyles(align: PosAlign.center));
+    printer.text('Tel: 830-221-1234',
+        styles: PosStyles(align: PosAlign.center));
+    printer.text('Web: www.example.com',
+        styles: PosStyles(align: PosAlign.center), linesAfter: 1);
 
-    var generatedPdfFile = await FlutterHtmlToPdf.convertFromHtmlContent(
-        htmlContent, path, targetFileName);
+    printer.hr();
+    printer.row([
+      PosColumn(text: 'Qty', width: 1),
+      PosColumn(text: 'Item', width: 7),
+      PosColumn(
+          text: 'Price', width: 2, styles: PosStyles(align: PosAlign.right)),
+      PosColumn(
+          text: 'Total', width: 2, styles: PosStyles(align: PosAlign.right)),
+    ]);
 
-    final doc = await PdfDocument.openFile(generatedPdfFile.path);
-    var page = await doc.getPage(1);
-    var imgPDF = await page.render();
-    var img = await imgPDF.createImageDetached();
-    var imgBytes = await img.toByteData(format: ImageByteFormat.png);
-    imglib.Image libImage = imglib.decodeImage(imgBytes.buffer
-        .asUint8List(imgBytes.offsetInBytes, imgBytes.lengthInBytes));
-    return libImage;
+    printer.row([
+      PosColumn(text: '2', width: 1),
+      PosColumn(text: 'ONION RINGS', width: 7),
+      PosColumn(
+          text: '0.99', width: 2, styles: PosStyles(align: PosAlign.right)),
+      PosColumn(
+          text: '1.98', width: 2, styles: PosStyles(align: PosAlign.right)),
+    ]);
+    printer.row([
+      PosColumn(text: '1', width: 1),
+      PosColumn(text: 'PIZZA', width: 7),
+      PosColumn(
+          text: '3.45', width: 2, styles: PosStyles(align: PosAlign.right)),
+      PosColumn(
+          text: '3.45', width: 2, styles: PosStyles(align: PosAlign.right)),
+    ]);
+    printer.row([
+      PosColumn(text: '1', width: 1),
+      PosColumn(text: 'SPRING ROLLS', width: 7),
+      PosColumn(
+          text: '2.99', width: 2, styles: PosStyles(align: PosAlign.right)),
+      PosColumn(
+          text: '2.99', width: 2, styles: PosStyles(align: PosAlign.right)),
+    ]);
+    printer.row([
+      PosColumn(text: '3', width: 1),
+      PosColumn(text: 'CRUNCHY STICKS', width: 7),
+      PosColumn(
+          text: '0.85', width: 2, styles: PosStyles(align: PosAlign.right)),
+      PosColumn(
+          text: '2.55', width: 2, styles: PosStyles(align: PosAlign.right)),
+    ]);
+    printer.hr();
+
+    printer.row([
+      PosColumn(
+          text: 'TOTAL',
+          width: 6,
+          styles: PosStyles(
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          )),
+      PosColumn(
+          text: '\$10.97',
+          width: 6,
+          styles: PosStyles(
+            align: PosAlign.right,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          )),
+    ]);
+
+    printer.hr(ch: '=', linesAfter: 1);
+
+    printer.row([
+      PosColumn(
+          text: 'Cash',
+          width: 8,
+          styles: PosStyles(align: PosAlign.right, width: PosTextSize.size2)),
+      PosColumn(
+          text: '\$15.00',
+          width: 4,
+          styles: PosStyles(align: PosAlign.right, width: PosTextSize.size2)),
+    ]);
+    printer.row([
+      PosColumn(
+          text: 'Change',
+          width: 8,
+          styles: PosStyles(align: PosAlign.right, width: PosTextSize.size2)),
+      PosColumn(
+          text: '\$4.03',
+          width: 4,
+          styles: PosStyles(align: PosAlign.right, width: PosTextSize.size2)),
+    ]);
+
+    printer.feed(2);
+    printer.text('Thank you!',
+        styles: PosStyles(align: PosAlign.center, bold: true));
+
+    final now = DateTime.now();
+    // final formatter = DateFormat('MM/dd/yyyy H:m');
+    // final String timestamp = formatter.format(now);
+    // printer.text(timestamp,
+    //     styles: PosStyles(align: PosAlign.center), linesAfter: 2);
+
+    // Print QR Code from image
+    // try {
+    //   const String qrData = 'example.com';
+    //   const double qrSize = 200;
+    //   final uiImg = await QrPainter(
+    //     data: qrData,
+    //     version: QrVersions.auto,
+    //     gapless: false,
+    //   ).toImageData(qrSize);
+    //   final dir = await getTemporaryDirectory();
+    //   final pathName = '${dir.path}/qr_tmp.png';
+    //   final qrFile = File(pathName);
+    //   final imgFile = await qrFile.writeAsBytes(uiImg.buffer.asUint8List());
+    //   final img = decodeImage(imgFile.readAsBytesSync());
+
+    //   printer.image(img);
+    // } catch (e) {
+    //   print(e);
+    // }
+
+    // Print QR Code using native function
+    // printer.qrcode('example.com');
+
+    printer.feed(1);
+    printer.cut();
   }
 
 
   Future<void> printBill(String printerIp) async {
 
-    var image = await getImage();
-    final Ticket ticket = Ticket(PaperSize.mm80);
-    ticket.image(image);
+    // var image = await getImage();
+    // final Ticket ticket = Ticket(PaperSize.mm80);
+    // ticket.image(image);
+    //
+    // final PrinterNetworkManager printerManager = PrinterNetworkManager();
+    // printerManager.selectPrinter(printerIp, port: 9100);
+    //
+    // final PosPrintResult res = await printerManager.printTicket(ticket);
+    // print('Print result: ${res.msg}');
 
-    final PrinterNetworkManager printerManager = PrinterNetworkManager();
-    printerManager.selectPrinter(printerIp, port: 9100);
+    const PaperSize paper = PaperSize.mm80;
+    final profile = await CapabilityProfile.load();
+    final printer = NetworkPrinter(paper, profile);
 
-    final PosPrintResult res = await printerManager.printTicket(ticket);
+    final PosPrintResult res = await printer.connect(printerIp, port: 9100);
+
+    if (res == PosPrintResult.success) {
+      printDemoReceipt(printer);
+      printer.disconnect();
+    }
+
+    Fluttertoast.showToast(
+        msg: "This is Center Short Toast",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+        timeInSecForIosWeb: 1,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0
+    );
+
     print('Print result: ${res.msg}');
   }
 
-  Future<Ticket> testTicket() async {
-    final Ticket ticket = Ticket(PaperSize.mm80);
+  void testReceipt(NetworkPrinter printer) async {
+    // printer.text(
+    //     'Regular: aA bB cC dD eE fF gG hH iI jJ kK lL mM nN oO pP qQ rR sS tT uU vV wW xX yY zZ');
+    // printer.text('Special 1: àÀ èÈ éÉ ûÛ üÜ çÇ ôÔ',
+    //     styles: PosStyles(codeTable: 'CP1252'));
+    // printer.text('Special 2: blåbærgrød',
+    //     styles: PosStyles(codeTable: 'CP1252'));
+    //
+    // printer.text('Bold text', styles: PosStyles(bold: true));
+    // printer.text('Reverse text', styles: PosStyles(reverse: true));
+    // printer.text('Underlined text',
+    //     styles: PosStyles(underline: true), linesAfter: 1);
+    // printer.text('Align left', styles: PosStyles(align: PosAlign.left));
+    // printer.text('Align center', styles: PosStyles(align: PosAlign.center));
+    // printer.text('Align right',
+    //     styles: PosStyles(align: PosAlign.right), linesAfter: 1);
+    // final ByteData data = await rootBundle.load('assets/images/tests.jpg');
+    // final Uint8List bytes = data.buffer.asUint8List();
+    // final Image image = decodeImage(bytes);
+    // printer.image(image);
+    // printer.text('Text size 200%',
+    //     styles: PosStyles(
+    //       height: PosTextSize.size2,
+    //       width: PosTextSize.size2,
+    //     ));
+    var data = await printTest();
+    printer.rawBytes(data);
+    printer.feed(2);
+    printer.cut();
+  }
 
-    ticket.text(
+  Future<List<int>> printTest() async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    List<int> bytes = [];
+
+    bytes += generator.text(
         'Regular: aA bB cC dD eE fF gG hH iI jJ kK lL mM nN oO pP qQ rR sS tT uU vV wW xX yY zZ');
-    ticket.text('Special 1: àÀ èÈ éÉ ûÛ üÜ çÇ ôÔ',
-        styles: PosStyles(codeTable: PosCodeTable.westEur));
-    ticket.text('Special 2: blåbærgrød',
-        styles: PosStyles(codeTable: PosCodeTable.westEur));
+    bytes += generator.text('Special 1: àÀ èÈ éÉ ûÛ üÜ çÇ ôÔ',
+        styles: PosStyles(codeTable: 'CP1252'));
+    bytes += generator.text('Special 2: blåbærgrød',
+        styles: PosStyles(codeTable: 'CP1252'));
 
-    ticket.text('Bold text', styles: PosStyles(bold: true));
-    ticket.text('Reverse text', styles: PosStyles(reverse: true));
-    ticket.text('Underlined text',
+    bytes += generator.text('Bold text', styles: PosStyles(bold: true));
+    bytes += generator.text('Reverse text', styles: PosStyles(reverse: true));
+    bytes += generator.text('Underlined text',
         styles: PosStyles(underline: true), linesAfter: 1);
-    ticket.text('Align left', styles: PosStyles(align: PosAlign.left));
-    ticket.text('Align center', styles: PosStyles(align: PosAlign.center));
-    ticket.text('Align right',
+    bytes +=
+        generator.text('Align left', styles: PosStyles(align: PosAlign.left));
+    bytes +=
+        generator.text('Align center', styles: PosStyles(align: PosAlign.center));
+    bytes += generator.text('Align right',
         styles: PosStyles(align: PosAlign.right), linesAfter: 1);
 
-    ticket.row([
+    bytes += generator.row([
       PosColumn(
         text: 'col3',
         width: 3,
@@ -234,30 +379,97 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     ]);
 
-    ticket.text('Text size 200%',
+    bytes += generator.text('Text size 200%',
         styles: PosStyles(
           height: PosTextSize.size2,
           width: PosTextSize.size2,
         ));
 
+    // // Print image:
+    // final ByteData data = await rootBundle.load('assets/logo.png');
+    // final Uint8List imgBytes = data.buffer.asUint8List();
+    // final Image image = decodeImage(imgBytes);
+    // bytes += generator.image(image);
+    // // Print image using an alternative (obsolette) command
+    // // bytes += generator.imageRaster(image);
 
     // Print barcode
     final List<int> barData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 4];
-    ticket.barcode(Barcode.upcA(barData));
-    ticket.feed(2);
-    ticket.cut();
-    return ticket;
+    bytes += generator.barcode(Barcode.upcA(barData));
+
+    // Print mixed (chinese + latin) text. Only for printers supporting Kanji mode
+    // ticket.text(
+    //   'hello ! 中文字 # world @ éphémère &',
+    //   styles: PosStyles(codeTable: PosCodeTable.westEur),
+    //   containsChinese: true,
+    // );
+
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+    return bytes;
   }
 
-  void testPrint(String printerIp, BuildContext ctx) async {
-    // TODO Don't forget to choose printer's paper size
-    final PrinterNetworkManager printerManager = PrinterNetworkManager();
-    printerManager.selectPrinter(printerIp, port: 9100);
-
-    final PosPrintResult res =
-        await printerManager.printTicket(await testTicket());
-    print('Print result: ${res.msg}');
-  }
+  // Future<Ticket> testTicket() async {
+  //   final Ticket ticket = Ticket(PaperSize.mm80);
+  //
+  //   ticket.text(
+  //       'Regular: aA bB cC dD eE fF gG hH iI jJ kK lL mM nN oO pP qQ rR sS tT uU vV wW xX yY zZ');
+  //   ticket.text('Special 1: àÀ èÈ éÉ ûÛ üÜ çÇ ôÔ',
+  //       styles: PosStyles(codeTable: PosCodeTable.westEur));
+  //   ticket.text('Special 2: blåbærgrød',
+  //       styles: PosStyles(codeTable: PosCodeTable.westEur));
+  //
+  //   ticket.text('Bold text', styles: PosStyles(bold: true));
+  //   ticket.text('Reverse text', styles: PosStyles(reverse: true));
+  //   ticket.text('Underlined text',
+  //       styles: PosStyles(underline: true), linesAfter: 1);
+  //   ticket.text('Align left', styles: PosStyles(align: PosAlign.left));
+  //   ticket.text('Align center', styles: PosStyles(align: PosAlign.center));
+  //   ticket.text('Align right',
+  //       styles: PosStyles(align: PosAlign.right), linesAfter: 1);
+  //
+  //   ticket.row([
+  //     PosColumn(
+  //       text: 'col3',
+  //       width: 3,
+  //       styles: PosStyles(align: PosAlign.center, underline: true),
+  //     ),
+  //     PosColumn(
+  //       text: 'col6',
+  //       width: 6,
+  //       styles: PosStyles(align: PosAlign.center, underline: true),
+  //     ),
+  //     PosColumn(
+  //       text: 'col3',
+  //       width: 3,
+  //       styles: PosStyles(align: PosAlign.center, underline: true),
+  //     ),
+  //   ]);
+  //
+  //   ticket.text('Text size 200%',
+  //       styles: PosStyles(
+  //         height: PosTextSize.size2,
+  //         width: PosTextSize.size2,
+  //       ));
+  //
+  //
+  //   // Print barcode
+  //   final List<int> barData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 4];
+  //   ticket.barcode(Barcode.upcA(barData));
+  //   ticket.feed(2);
+  //   ticket.cut();
+  //   return ticket;
+  // }
+  //
+  // void testPrint(String printerIp, BuildContext ctx) async {
+  //   // TODO Don't forget to choose printer's paper size
+  //   final PrinterNetworkManager printerManager = PrinterNetworkManager();
+  //   printerManager.selectPrinter(printerIp, port: 9100);
+  //
+  //   final PosPrintResult res =
+  //       await printerManager.printTicket(await testTicket());
+  //   print('Print result: ${res.msg}');
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -291,9 +503,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     itemCount: devices.length,
                     itemBuilder: (BuildContext context, int index) {
                       return InkWell(
-                        onTap: () => this.isPrintBlue
-                            ? printBluetooth(devices[index])
-                            : printBill(devices[index]),
+                        onTap: () => printBill(devices[index]),
                         child: Column(
                           children: <Widget>[
                             Container(
